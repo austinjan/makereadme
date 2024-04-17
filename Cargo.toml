@@ -2,11 +2,26 @@
 name = "makereadme"
 version = "0.1.0"
 edition = "2021"
+authors =["Austin Jan <austin.jan@gmail.com>"]
+license = "MIT"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = "4.5.4"
-reqwest = { version = "0.11.3", features = ["blocking", "json"] }
+reqwest = { version = "0.12.3", features = ["stream"] }
 serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.116"
 toml = "0.8.12"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+eframe = { workspace = true, default-features = false, features = [
+    # accesskit struggles with threading
+    "default_fonts",
+    "wgpu",
+] }
+env_logger = { version = "0.11.3", default-features = false, features = [
+    "auto-color",
+    "humantime",
+] }

@@ -1,26 +1,38 @@
 // This file contains all LLM API related code.
-use crate::conf;
-
 use reqwest;
+use reqwest::{Client, Response};
+use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::io::Read;
-use std::io::Write;
 
 // API defines the LLM API.
 // ollama generate API enpoints from the API definition.
-const OLLA_GEN: &str = r#"/api/generate"#;
-const OLLA_EMBED: &str = r#"/api/embeddings"#;
+pub const OLLA_CHAT: &str = r#"/api/chat"#;
 
 // send_request sends a request to the LLM host, return a JSON response.
-fn send_request(url: &str, data: &str) -> Result<String, Box<dyn Error>> {
-    let client = reqwest::blocking::Client::new();
-    let res = client.post(url).body(data.to_string()).send()?;
-    let body = res.text()?;
-    Ok(body)
+// fn send_request(url: &str, data: &str) -> Result<String, Box<dyn Error>> {
+//     let client = reqwest::blocking::Client::builder()
+//         .timeout(Duration::from_secs(600))
+//         .build()?;
+
+//     let res = client.post(url).body(data.to_string()).send()?;
+//     let body = res.text()?;
+//     Ok(body)
+// }
+
+/// send a request and return a stream of response
+/// url: the url to send the request
+/// data: the data to send
+/// return: a stream of response
+/// error: return Box<dyn Error> if error
+pub async fn send_request_stream(url: &str, data: &str) -> Result<Response, Box<dyn Error>> {
+    let client = Client::new();
+
+    let res = client.post(url).body(data.to_string()).send().await?;
+    Ok(res)
 }
 
 // define ollam generate API parameters
-#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct GenerateParams {
     pub prompt: String,
     pub model: String,
@@ -28,47 +40,53 @@ pub struct GenerateParams {
     pub format: String, // only accept json so far
 }
 
-// send request to ollama server, host and port read from config
-pub fn ollama_generate(prompt: &str) -> Result<String, Box<dyn Error>> {
-    let conf = match conf::read_config("conf.toml") {
-        Ok(it) => it,
-        Err(err) => return Err(err),
-    };
-    let url = format!("http://{}:{}{}", conf.host, conf.port, OLLA_GEN);
-    let res = send_request(&url, prompt)?;
-    Ok(res)
+// message object
+#[derive(Serialize, Deserialize)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::TcpListener;
+// /api/chat request parameters
+#[derive(Serialize, Deserialize)]
+pub struct ChatParams {
+    pub messages: Vec<Message>,
+    pub model: String,
+    pub stream: bool,
+}
 
-    #[test]
-    fn test_send_request() {
-        // Start a dummy server
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let url = format!("http://127.0.0.1:{}", port);
-        let data = "test data";
+// /api/chat response
+#[derive(Serialize, Deserialize)]
+pub struct ChatResponse {
+    pub message: Option<Message>,
+    pub model: String,
+    pub created_at: String,
+    pub total_duration: u64,
+    pub load_duration: u64,
+    pub prompt_eval_duration: u64,
+    pub eval_duration: u64,
+    pub eval_count: u64,
+    pub done: bool,
+}
 
-        // Spawn a thread to handle the request
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let mut stream = stream.unwrap();
-                let mut buffer = [0; 1024];
-                stream.read(&mut buffer).unwrap();
-                let response = "HTTP/1.1 200 OK\r\n\r\n";
-                stream.write(response.as_bytes()).unwrap();
-                stream.write(data.as_bytes()).unwrap();
-                stream.flush().unwrap();
-            }
-        });
+impl ChatResponse {
+    // answer return chatresponse.message.content
+    pub fn answer(&self) -> Option<String> {
+        match &self.message {
+            Some(it) => Some(it.content.clone()),
+            None => None,
+        }
+    }
 
-        // Send a request to the dummy server
-        let response = send_request(&url, data);
+    #[allow(dead_code)]
+    // total_duration return total_duration, convert nanoseconds to seconds
+    pub fn total_duration(&self) -> Option<f64> {
+        Some(self.total_duration as f64 / 1_000_000_000.0)
+    }
 
-        // Check if the response is Ok
-        assert!(response.is_ok());
+    #[allow(dead_code)]
+    // load_duration return load_duration, convert nanoseconds to seconds
+    pub fn load_duration(&self) -> Option<f64> {
+        Some(self.load_duration as f64 / 1_000_000_000.0)
     }
 }
