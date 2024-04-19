@@ -13,9 +13,9 @@ pub struct Config {
     pub port: u16,
     pub model: String,
 }
-
+#[allow(dead_code)]
 // Read the configuration file if not found create a default configuration file
-pub fn read_config(file: &str) -> Result<Config, Box<dyn Error>> {
+pub fn read_config_or_default(file: &str) -> Result<Config, Box<dyn Error>> {
     let config = match fs::read_to_string(file) {
         Ok(content) => content,
         Err(_) => {
@@ -32,6 +32,7 @@ pub fn read_config(file: &str) -> Result<Config, Box<dyn Error>> {
     Ok(config)
 }
 
+#[allow(dead_code)]
 // Write the configuration file
 pub fn write_config(file: &str, config: &Config) -> Result<(), Box<dyn Error>> {
     let toml = toml::to_string(config)?;
@@ -59,7 +60,7 @@ mod tests {
         write_config(file, &config).unwrap();
 
         // Read the configuration from the file
-        let read_config = read_config(file).unwrap();
+        let read_config = read_config_or_default(file).unwrap();
 
         // Check if the read configuration is the same as the written configuration
         assert_eq!(config.host, read_config.host);
